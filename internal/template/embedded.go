@@ -5,7 +5,7 @@ import (
 	"io/fs"
 )
 
-//go:embed embedded/empty
+//go:embed all:embedded/empty
 var embeddedEmpty embed.FS
 
 // GetEmbeddedEmptyTemplate returns the filesystem for the embedded "empty" template
