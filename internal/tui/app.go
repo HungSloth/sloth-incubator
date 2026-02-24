@@ -74,7 +74,7 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case formCompletedMsg:
 		a.answers = msg.answers
-		a.confirm = NewConfirmModel(a.selectedTemplate, a.answers)
+		a.confirm = NewConfirmModel(a.selectedTemplate, a.answers, a.cfg)
 		a.screen = ScreenConfirm
 		return a, nil
 

@@ -3,8 +3,10 @@ package main
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"github.com/HungSloth/sloth-incubator/internal/config"
+	"github.com/HungSloth/sloth-incubator/internal/preview"
 	"github.com/HungSloth/sloth-incubator/internal/template"
 	"github.com/HungSloth/sloth-incubator/internal/tui"
 	tea "github.com/charmbracelet/bubbletea"
@@ -122,7 +124,41 @@ func main() {
 		},
 	}
 
-	rootCmd.AddCommand(newCmd, listCmd, versionCmd, updateCmd, configCmd, addRepoCmd)
+	previewCmd := &cobra.Command{
+		Use:   "preview [project-dir]",
+		Short: "Start a local noVNC preview session",
+		Args:  cobra.MaximumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			projectDir := "."
+			if len(args) == 1 {
+				projectDir = args[0]
+			}
+			absDir, err := filepath.Abs(projectDir)
+			if err != nil {
+				return fmt.Errorf("resolving project directory: %w", err)
+			}
+
+			cfg, err := preview.LoadConfig(absDir)
+			if err != nil {
+				return err
+			}
+
+			url, err := preview.Start(absDir, cfg)
+			if err != nil {
+				return err
+			}
+
+			fmt.Printf("Preview started: %s\n", url)
+			if err := preview.OpenBrowser(url); err != nil {
+				fmt.Fprintf(os.Stderr, "Warning: could not open browser automatically: %v\n", err)
+				fmt.Printf("Open this URL manually: %s\n", url)
+			}
+
+			return nil
+		},
+	}
+
+	rootCmd.AddCommand(newCmd, listCmd, versionCmd, updateCmd, configCmd, addRepoCmd, previewCmd)
 
 	if err := rootCmd.Execute(); err != nil {
 		os.Exit(1)

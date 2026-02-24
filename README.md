@@ -27,6 +27,7 @@ incubator update     # Refresh templates from remote repos
 incubator config     # Edit configuration interactively
 incubator config --show  # Print current config
 incubator add-repo <url> # Add a community template repository
+incubator preview [project-dir] # Start local noVNC preview
 ```
 
 ### Creating a Project
@@ -34,9 +35,10 @@ incubator add-repo <url> # Add a community template repository
 Run `incubator` (or `incubator new`) and the TUI walks you through:
 
 1. **Pick a template** — choose from built-in and remote templates
-2. **Answer prompts** — project name, description, visibility, license
+2. **Answer prompts** — project name, description, visibility, license, whether to create a GitHub repo, and optional preview tooling
 3. **Confirm** — review the files that will be created
 4. **Scaffold** — project directory is created with all files, a `.devcontainer`, git init, and initial commit
+5. **GitHub (optional)** — if you selected repo creation, Incubator creates the remote repo and pushes `HEAD`
 
 Projects are created under `~/projects/` by default (configurable).
 
@@ -120,6 +122,26 @@ hooks:
 ```
 
 Template files use Go's `text/template` syntax. Files ending in `.tmpl` are processed through the template engine (with the `.tmpl` extension stripped from the output). Template variables in directory/file names use `{{variable}}` syntax.
+
+### Headless Preview (Xvfb + noVNC)
+
+If you enable preview tooling during project creation, Incubator generates preview assets in `.incubator/preview/`.
+
+Run:
+
+```bash
+incubator preview .
+```
+
+This command:
+- loads `.incubator/preview/config.yaml`
+- builds a local Docker image for preview
+- starts Xvfb + x11vnc + noVNC in a container
+- opens `http://localhost:<novnc_port>` in your default browser
+
+Notes:
+- Docker is required on the host machine.
+- `app_command` in `.incubator/preview/config.yaml` controls what app/process runs in the virtual display.
 
 ## Dev Container Auth
 

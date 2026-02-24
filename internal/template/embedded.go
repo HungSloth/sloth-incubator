@@ -15,11 +15,12 @@ func GetEmbeddedEmptyTemplate() (fs.FS, error) {
 
 // GetBuiltinManifest returns the manifest for the built-in "empty" template
 func GetBuiltinManifest() *TemplateManifest {
-	return &TemplateManifest{
+	manifest := &TemplateManifest{
 		Name:        "empty",
 		Version:     "1.0.0",
 		Description: "Blank project with devcontainer",
 		Author:      "HungSloth",
+		IsBuiltin:   true,
 		Prompts: []Prompt{
 			{
 				Name:     "project_name",
@@ -55,6 +56,30 @@ func GetBuiltinManifest() *TemplateManifest {
 				},
 				Default: "MIT",
 			},
+			{
+				Name:    "create_github_repo",
+				Label:   "Create GitHub repository?",
+				Type:    PromptConfirm,
+				Default: true,
+			},
+			{
+				Name:    "enable_preview",
+				Label:   "Enable headless preview tooling?",
+				Type:    PromptConfirm,
+				Default: false,
+			},
+		},
+		Files: []FileRule{
+			{
+				Src:  ".incubator/preview/**",
+				When: "{{if .enable_preview}}true{{end}}",
+			},
+		},
+		Preview: PreviewConfig{
+			Enabled:    true,
+			AppCommand: "echo \"Set preview.app_command in .incubator/preview/config.yaml\" && sleep infinity",
 		},
 	}
+	manifest.ApplyDefaults()
+	return manifest
 }

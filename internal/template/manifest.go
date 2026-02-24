@@ -63,6 +63,14 @@ type DevcontainerConfig struct {
 	Features  DevcontainerFeatures `yaml:"features"`
 }
 
+// PreviewConfig holds optional headless preview configuration.
+type PreviewConfig struct {
+	Enabled    bool   `yaml:"enabled"`
+	AppCommand string `yaml:"app_command"`
+	NoVNCPort  int    `yaml:"novnc_port"`
+	VNCPort    int    `yaml:"vnc_port"`
+}
+
 // HooksConfig holds hook configuration
 type HooksConfig struct {
 	PostCreate string `yaml:"post_create"`
@@ -77,5 +85,20 @@ type TemplateManifest struct {
 	Prompts      []Prompt           `yaml:"prompts"`
 	Files        []FileRule         `yaml:"files"`
 	Devcontainer DevcontainerConfig `yaml:"devcontainer"`
+	Preview      PreviewConfig      `yaml:"preview"`
 	Hooks        HooksConfig        `yaml:"hooks"`
+
+	// Runtime-only metadata, not part of template.yaml schema.
+	SourcePath string `yaml:"-"`
+	IsBuiltin  bool   `yaml:"-"`
+}
+
+// ApplyDefaults applies safe defaults so templates can omit optional preview fields.
+func (m *TemplateManifest) ApplyDefaults() {
+	if m.Preview.NoVNCPort == 0 {
+		m.Preview.NoVNCPort = 6080
+	}
+	if m.Preview.VNCPort == 0 {
+		m.Preview.VNCPort = 5900
+	}
 }

@@ -30,6 +30,14 @@ type ProgressStep struct {
 	Error  string
 }
 
+const (
+	stepCreateProjectDir = "Creating project directory"
+	stepRenderTemplates  = "Rendering templates"
+	stepInitGitRepo      = "Initializing git repo"
+	stepCreateGitHubRepo = "Creating GitHub repo"
+	stepPushToOrigin     = "Pushing to origin"
+)
+
 // ProgressModel handles the progress screen
 type ProgressModel struct {
 	manifest *template.TemplateManifest
@@ -60,17 +68,23 @@ func NewProgressModel(manifest *template.TemplateManifest, answers map[string]in
 	s := spinner.New()
 	s.Spinner = spinner.Dot
 
+	steps := []ProgressStep{
+		{Name: stepCreateProjectDir, Status: StepPending},
+		{Name: stepRenderTemplates, Status: StepPending},
+		{Name: stepInitGitRepo, Status: StepPending},
+	}
+	if shouldCreateGitHubRepo(answers) {
+		steps = append(steps,
+			ProgressStep{Name: stepCreateGitHubRepo, Status: StepPending},
+			ProgressStep{Name: stepPushToOrigin, Status: StepPending},
+		)
+	}
+
 	return ProgressModel{
 		manifest: manifest,
 		answers:  answers,
 		cfg:      cfg,
-		steps: []ProgressStep{
-			{Name: "Creating project directory", Status: StepPending},
-			{Name: "Rendering templates", Status: StepPending},
-			{Name: "Initializing git repo", Status: StepPending},
-			{Name: "Creating GitHub repo", Status: StepPending},
-			{Name: "Pushing to origin", Status: StepPending},
-		},
+		steps:    steps,
 		current: 0,
 		spinner: s,
 	}
@@ -116,7 +130,7 @@ func (m ProgressModel) Update(msg tea.Msg) (ProgressModel, tea.Cmd) {
 		m.failed = true
 
 		// If git/github steps fail, still try to finish with what we have
-		if m.current >= 3 { // GitHub steps
+		if isGitHubStep(m.steps[m.current].Name) {
 			m.current++
 			if m.current >= len(m.steps) {
 				m.done = true
@@ -166,17 +180,22 @@ func (m ProgressModel) runCurrentStep() tea.Cmd {
 			baseDir = cfg.GetProjectDir()
 		}
 		projectDir := filepath.Join(baseDir, projectName)
+		stepName := m.steps[step].Name
 
-		switch step {
-		case 0: // Create directory
+		switch stepName {
+		case stepCreateProjectDir:
 			if err := os.MkdirAll(projectDir, 0755); err != nil {
 				return stepErrorMsg{err: fmt.Errorf("creating directory: %w", err)}
 			}
 			return stepDoneMsg{projectDir: projectDir}
 
-		case 1: // Render templates
+		case stepRenderTemplates:
 			renderer := template.NewRenderer(manifest, answers)
-			templateFS, err := template.GetEmbeddedEmptyTemplate()
+			templateRepo := config.DefaultConfig().TemplateRepo
+			if cfg != nil && cfg.TemplateRepo != "" {
+				templateRepo = cfg.TemplateRepo
+			}
+			templateFS, err := template.ResolveTemplateFS(manifest, config.ConfigDir(), templateRepo)
 			if err != nil {
 				return stepErrorMsg{err: fmt.Errorf("loading template: %w", err)}
 			}
@@ -185,7 +204,7 @@ func (m ProgressModel) runCurrentStep() tea.Cmd {
 			}
 			return stepDoneMsg{}
 
-		case 2: // Git init
+		case stepInitGitRepo:
 			if err := git.InitRepo(projectDir); err != nil {
 				return stepErrorMsg{err: err}
 			}
@@ -194,7 +213,11 @@ func (m ProgressModel) runCurrentStep() tea.Cmd {
 			}
 			return stepDoneMsg{}
 
-		case 3: // Create GitHub repo
+		case stepCreateGitHubRepo:
+			if !shouldCreateGitHubRepo(answers) {
+				return stepDoneMsg{}
+			}
+
 			visibility := "private"
 			if v, ok := answers["visibility"]; ok {
 				visibility = fmt.Sprintf("%v", v)
@@ -207,7 +230,11 @@ func (m ProgressModel) runCurrentStep() tea.Cmd {
 			}
 			return stepDoneMsg{repoURL: repoURL}
 
-		case 4: // Push
+		case stepPushToOrigin:
+			if !shouldCreateGitHubRepo(answers) {
+				return stepDoneMsg{}
+			}
+
 			if err := git.Push(projectDir); err != nil {
 				return stepErrorMsg{err: err}
 			}
@@ -220,23 +247,53 @@ func (m ProgressModel) runCurrentStep() tea.Cmd {
 
 // progressPercent returns the overall progress percentage
 func (m ProgressModel) progressPercent() float64 {
-	// Step weights: create dir (10%), render (20%), git init (10%), github (40%), push (20%)
-	weights := []float64{0.10, 0.20, 0.10, 0.40, 0.20}
+	weights := map[string]float64{
+		stepCreateProjectDir: 0.10,
+		stepRenderTemplates:  0.20,
+		stepInitGitRepo:      0.10,
+		stepCreateGitHubRepo: 0.40,
+		stepPushToOrigin:     0.20,
+	}
+	var totalWeight float64
+	for _, step := range m.steps {
+		totalWeight += weights[step.Name]
+	}
+	if totalWeight == 0 {
+		return 0
+	}
+
 	var total float64
-	for i, step := range m.steps {
-		if i >= len(weights) {
-			break
-		}
+	for _, step := range m.steps {
+		weight := weights[step.Name] / totalWeight
 		switch step.Status {
 		case StepDone:
-			total += weights[i]
+			total += weight
 		case StepRunning:
-			total += weights[i] * 0.5 // half credit for running
+			total += weight * 0.5 // half credit for running
 		case StepFailed:
-			total += weights[i] // count as done for progress purposes
+			total += weight // count as done for progress purposes
 		}
 	}
 	return total
+}
+
+func shouldCreateGitHubRepo(answers map[string]interface{}) bool {
+	if answers == nil {
+		return true
+	}
+	value, ok := answers["create_github_repo"]
+	if !ok {
+		return true
+	}
+	enabled, ok := value.(bool)
+	if !ok {
+		return true
+	}
+	return enabled
+}
+
+func isGitHubStep(stepName string) bool {
+	return stepName == stepCreateGitHubRepo || stepName == stepPushToOrigin
 }
 
 // renderProgressBar renders a visual progress bar

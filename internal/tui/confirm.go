@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/HungSloth/sloth-incubator/internal/config"
 	"github.com/HungSloth/sloth-incubator/internal/template"
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -16,10 +17,14 @@ type ConfirmModel struct {
 }
 
 // NewConfirmModel creates a new confirmation model
-func NewConfirmModel(manifest *template.TemplateManifest, answers map[string]interface{}) ConfirmModel {
-	// Get the list of files from the embedded template
+func NewConfirmModel(manifest *template.TemplateManifest, answers map[string]interface{}, cfg *config.Config) ConfirmModel {
+	// Get the list of files from the selected template source.
 	renderer := template.NewRenderer(manifest, answers)
-	templateFS, err := template.GetEmbeddedEmptyTemplate()
+	templateRepo := config.DefaultConfig().TemplateRepo
+	if cfg != nil && cfg.TemplateRepo != "" {
+		templateRepo = cfg.TemplateRepo
+	}
+	templateFS, err := template.ResolveTemplateFS(manifest, config.ConfigDir(), templateRepo)
 	var files []string
 	if err == nil {
 		files, _ = renderer.ListFiles(templateFS)
@@ -65,7 +70,9 @@ func (m ConfirmModel) View() string {
 	b.WriteString(fmt.Sprintf("  %s  %s\n", labelStyle.Render("Template:"), valueStyle.Render(m.manifest.Name)))
 
 	if vis := m.getAnswer("visibility", ""); vis != "" {
-		b.WriteString(fmt.Sprintf("  %s  %s\n", labelStyle.Render("Visibility:"), valueStyle.Render(vis)))
+		if createRepo := m.getAnswer("create_github_repo", "true"); createRepo == "true" {
+			b.WriteString(fmt.Sprintf("  %s  %s\n", labelStyle.Render("Visibility:"), valueStyle.Render(vis)))
+		}
 	}
 	if lic := m.getAnswer("license", ""); lic != "" {
 		b.WriteString(fmt.Sprintf("  %s  %s\n", labelStyle.Render("License:"), valueStyle.Render(lic)))

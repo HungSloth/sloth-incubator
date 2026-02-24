@@ -2,6 +2,7 @@ package template
 
 import (
 	"fmt"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -110,6 +111,9 @@ func (l *Loader) LoadManifest(templatePath string) (*TemplateManifest, error) {
 	if err := yaml.Unmarshal(data, &manifest); err != nil {
 		return nil, fmt.Errorf("parsing template.yaml: %w", err)
 	}
+	manifest.SourcePath = templatePath
+	manifest.IsBuiltin = false
+	manifest.ApplyDefaults()
 
 	return &manifest, nil
 }
@@ -134,11 +138,11 @@ func (l *Loader) LoadAllManifests() ([]*TemplateManifest, error) {
 	return manifests, nil
 }
 
-// GetTemplateFS returns an os.DirFS for the template directory
-func (l *Loader) GetTemplateFS(templatePath string) (string, error) {
+// GetTemplateFS returns an os.DirFS for the template directory.
+func (l *Loader) GetTemplateFS(templatePath string) (fs.FS, error) {
 	dir := filepath.Join(l.TemplatesDir(), templatePath)
 	if _, err := os.Stat(dir); err != nil {
-		return "", fmt.Errorf("template directory not found: %s", dir)
+		return nil, fmt.Errorf("template directory not found: %s", dir)
 	}
-	return dir, nil
+	return os.DirFS(dir), nil
 }
