@@ -4,7 +4,10 @@
   "features": {
     "ghcr.io/devcontainers/features/github-cli:1": {}
   },
-  "postCreateCommand": "echo 'Dev container ready!'",
+  "postCreateCommand": "gh auth setup-git && echo 'Dev container ready!'",
+  "remoteEnv": {
+    "GH_TOKEN": "${localEnv:GH_TOKEN}"
+  },
   "customizations": {
     "vscode": {
       "settings": {},
