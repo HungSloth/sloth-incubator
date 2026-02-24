@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"github.com/HungSloth/sloth-incubator/internal/config"
 	"github.com/HungSloth/sloth-incubator/internal/template"
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -28,6 +29,7 @@ type App struct {
 	height   int
 
 	// Shared state
+	cfg              *config.Config
 	selectedTemplate *template.TemplateManifest
 	answers          map[string]interface{}
 	projectDir       string
@@ -36,14 +38,11 @@ type App struct {
 }
 
 // NewApp creates a new App model
-func NewApp() App {
-	manifests := []*template.TemplateManifest{
-		template.GetBuiltinManifest(),
-	}
-
+func NewApp(manifests []*template.TemplateManifest, cfg *config.Config) App {
 	return App{
 		screen:  ScreenPicker,
 		picker:  NewPickerModel(manifests),
+		cfg:     cfg,
 		answers: make(map[string]interface{}),
 	}
 }
@@ -84,7 +83,7 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a, nil
 
 	case confirmProceedMsg:
-		a.progress = NewProgressModel(a.selectedTemplate, a.answers)
+		a.progress = NewProgressModel(a.selectedTemplate, a.answers, a.cfg)
 		a.screen = ScreenProgress
 		return a, a.progress.Init()
 

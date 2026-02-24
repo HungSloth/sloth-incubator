@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/HungSloth/sloth-incubator/internal/config"
 	"github.com/HungSloth/sloth-incubator/internal/git"
 	"github.com/HungSloth/sloth-incubator/internal/template"
 	"github.com/charmbracelet/bubbles/spinner"
@@ -33,6 +34,7 @@ type ProgressStep struct {
 type ProgressModel struct {
 	manifest *template.TemplateManifest
 	answers  map[string]interface{}
+	cfg      *config.Config
 	steps    []ProgressStep
 	current  int
 	spinner  spinner.Model
@@ -54,13 +56,14 @@ type stepErrorMsg struct {
 }
 
 // NewProgressModel creates a new progress model
-func NewProgressModel(manifest *template.TemplateManifest, answers map[string]interface{}) ProgressModel {
+func NewProgressModel(manifest *template.TemplateManifest, answers map[string]interface{}, cfg *config.Config) ProgressModel {
 	s := spinner.New()
 	s.Spinner = spinner.Dot
 
 	return ProgressModel{
 		manifest: manifest,
 		answers:  answers,
+		cfg:      cfg,
 		steps: []ProgressStep{
 			{Name: "Creating project directory", Status: StepPending},
 			{Name: "Rendering templates", Status: StepPending},
@@ -154,11 +157,15 @@ func (m ProgressModel) runCurrentStep() tea.Cmd {
 	step := m.current
 	answers := m.answers
 	manifest := m.manifest
+	cfg := m.cfg
 
 	return func() tea.Msg {
 		projectName := fmt.Sprintf("%v", answers["project_name"])
-		homeDir, _ := os.UserHomeDir()
-		projectDir := filepath.Join(homeDir, "projects", projectName)
+		baseDir := filepath.Join(os.Getenv("HOME"), "projects")
+		if cfg != nil {
+			baseDir = cfg.GetProjectDir()
+		}
+		projectDir := filepath.Join(baseDir, projectName)
 
 		switch step {
 		case 0: // Create directory
@@ -211,6 +218,42 @@ func (m ProgressModel) runCurrentStep() tea.Cmd {
 	}
 }
 
+// progressPercent returns the overall progress percentage
+func (m ProgressModel) progressPercent() float64 {
+	// Step weights: create dir (10%), render (20%), git init (10%), github (40%), push (20%)
+	weights := []float64{0.10, 0.20, 0.10, 0.40, 0.20}
+	var total float64
+	for i, step := range m.steps {
+		if i >= len(weights) {
+			break
+		}
+		switch step.Status {
+		case StepDone:
+			total += weights[i]
+		case StepRunning:
+			total += weights[i] * 0.5 // half credit for running
+		case StepFailed:
+			total += weights[i] // count as done for progress purposes
+		}
+	}
+	return total
+}
+
+// renderProgressBar renders a visual progress bar
+func renderProgressBar(percent float64, width int) string {
+	if width < 4 {
+		width = 20
+	}
+	filled := int(percent * float64(width))
+	if filled > width {
+		filled = width
+	}
+	empty := width - filled
+
+	bar := strings.Repeat("█", filled) + strings.Repeat("░", empty)
+	return fmt.Sprintf("[%s] %d%%", bar, int(percent*100))
+}
+
 func (m ProgressModel) View() string {
 	var b strings.Builder
 
@@ -239,6 +282,16 @@ func (m ProgressModel) View() string {
 		if step.Status == StepFailed && step.Error != "" {
 			b.WriteString(fmt.Sprintf("    %s\n", errorStyle.Render(step.Error)))
 		}
+	}
+
+	// Progress bar
+	b.WriteString("\n")
+	percent := m.progressPercent()
+	bar := renderProgressBar(percent, 30)
+	if percent >= 1.0 {
+		b.WriteString(fmt.Sprintf("  %s\n", successStyle.Render(bar)))
+	} else {
+		b.WriteString(fmt.Sprintf("  %s\n", focusedStyle.Render(bar)))
 	}
 
 	if m.failed {

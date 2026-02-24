@@ -1,5 +1,5 @@
-# Binary
-incubator
+# Binary (root level only)
+/incubator
 /dist/
 
 # OS files
