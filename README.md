@@ -224,12 +224,17 @@ go test ./...
 Releases are built with [GoReleaser](https://goreleaser.com) and produce binaries for linux/darwin/windows on amd64/arm64.
 
 ```bash
-# Tag the version
+# Tag the version (this triggers automated GitHub release workflow)
 git tag v0.x.0
 git push origin v0.x.0
+```
 
-# Build and publish the release
-GITHUB_TOKEN=$GH_TOKEN goreleaser release --clean
+The `Release` GitHub Actions workflow runs automatically on version tags (`v*`) and publishes release artifacts.
+
+For local dry-runs:
+
+```bash
+goreleaser release --snapshot --clean
 ```
 
 ## License

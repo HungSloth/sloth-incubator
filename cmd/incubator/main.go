@@ -124,6 +124,26 @@ func main() {
 		},
 	}
 
+	createTemplateCmd := &cobra.Command{
+		Use:   "create-template [name]",
+		Short: "Create a local template scaffold",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg, err := config.Load()
+			if err != nil {
+				return err
+			}
+			localDir := cfg.GetLocalTemplateDir()
+			templateDir, err := template.CreateLocalTemplate(localDir, args[0])
+			if err != nil {
+				return err
+			}
+			fmt.Printf("Created local template: %s\n", templateDir)
+			fmt.Println("Edit template.yaml and files/ to customize it.")
+			return nil
+		},
+	}
+
 	previewCmd := &cobra.Command{
 		Use:   "preview [project-dir]",
 		Short: "Start a local noVNC preview session",
@@ -158,7 +178,7 @@ func main() {
 		},
 	}
 
-	rootCmd.AddCommand(newCmd, listCmd, versionCmd, updateCmd, configCmd, addRepoCmd, previewCmd)
+	rootCmd.AddCommand(newCmd, listCmd, versionCmd, updateCmd, configCmd, addRepoCmd, createTemplateCmd, previewCmd)
 
 	if err := rootCmd.Execute(); err != nil {
 		os.Exit(1)
@@ -188,6 +208,12 @@ func loadAllTemplates(cfg *config.Config) []*template.TemplateManifest {
 	if !cache.NeedsInitialFetch() {
 		if remote, err := loader.LoadAllManifests(); err == nil && len(remote) > 0 {
 			manifests = append(manifests, remote...)
+		}
+	}
+
+	if cfg != nil {
+		if local, err := template.LoadLocalManifests(cfg.GetLocalTemplateDir()); err == nil && len(local) > 0 {
+			manifests = append(manifests, local...)
 		}
 	}
 

@@ -16,6 +16,7 @@ type Config struct {
 	DefaultVisibility string   `yaml:"default_visibility"`
 	DefaultLicense    string   `yaml:"default_license"`
 	ProjectDir        string   `yaml:"project_dir"`
+	LocalTemplateDir  string   `yaml:"local_template_dir"`
 	Editor            string   `yaml:"editor"`
 	TemplateRepo      string   `yaml:"template_repo"`
 	TemplateRepos     []string `yaml:"template_repos,omitempty"`
@@ -29,6 +30,7 @@ func DefaultConfig() *Config {
 		DefaultVisibility: "private",
 		DefaultLicense:    "MIT",
 		ProjectDir:        filepath.Join(homeDir, "projects"),
+		LocalTemplateDir:  "~/.incubator/local-templates",
 		Editor:            "none",
 		TemplateRepo:      "HungSloth/incubator-templates",
 		AutoUpdateCheck:   true,
@@ -93,6 +95,19 @@ func (c *Config) Save() error {
 // GetProjectDir returns the expanded project directory
 func (c *Config) GetProjectDir() string {
 	dir := c.ProjectDir
+	if strings.HasPrefix(dir, "~") {
+		homeDir, _ := os.UserHomeDir()
+		dir = filepath.Join(homeDir, dir[1:])
+	}
+	return dir
+}
+
+// GetLocalTemplateDir returns the expanded local template directory.
+func (c *Config) GetLocalTemplateDir() string {
+	dir := c.LocalTemplateDir
+	if dir == "" {
+		dir = DefaultConfig().LocalTemplateDir
+	}
 	if strings.HasPrefix(dir, "~") {
 		homeDir, _ := os.UserHomeDir()
 		dir = filepath.Join(homeDir, dir[1:])
