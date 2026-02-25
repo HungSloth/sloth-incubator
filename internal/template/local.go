@@ -157,6 +157,12 @@ func localTemplateScaffold(name string) map[string]string {
 		"files/.devcontainer/devcontainer.json.tmpl": `{
   "name": "{{.project_name}}",
   "image": "mcr.microsoft.com/devcontainers/base:ubuntu",
+  "runArgs": [
+    "-p",
+    "6080:6080",
+    "-p",
+    "5900:5900"
+  ],
   "features": {
     "ghcr.io/devcontainers/features/github-cli:1": {},
     "ghcr.io/devcontainers/features/node:1": {},
@@ -164,7 +170,7 @@ func localTemplateScaffold(name string) map[string]string {
     "ghcr.io/devcontainers/features/go:1": {},
     "ghcr.io/devcontainers/features/rust:1": {}
   },
-  "postCreateCommand": "gh auth setup-git && echo 'Local template dev container ready!'",
+  "postCreateCommand": "gh auth setup-git{{if .enable_preview}} && sudo apt-get update && sudo apt-get install -y --no-install-recommends xvfb x11vnc novnc websockify openbox xterm{{end}} && echo 'Local template dev container ready!'",
   "remoteEnv": {
     "GH_TOKEN": "${localEnv:GH_TOKEN}"
   },
@@ -178,7 +184,6 @@ func localTemplateScaffold(name string) map[string]string {
 `,
 		"files/.incubator/preview/config.yaml.tmpl": previewConfigTemplate,
 		"files/.incubator/preview/entrypoint.sh":    previewEntrypointTemplate,
-		"files/.incubator/preview/Dockerfile":       previewDockerfileTemplate,
 	}
 }
 
@@ -202,7 +207,6 @@ func localTemplateScaffoldWithOptions(opts LocalTemplateWizardOptions) map[strin
 	if hasTool(opts.Tools, "preview") {
 		files["files/.incubator/preview/config.yaml.tmpl"] = previewConfigTemplate
 		files["files/.incubator/preview/entrypoint.sh"] = previewEntrypointTemplate
-		files["files/.incubator/preview/Dockerfile"] = previewDockerfileTemplate
 	}
 
 	return files
@@ -334,9 +338,15 @@ func devcontainerTemplateForSoftware(software string) string {
 	return fmt.Sprintf(`{
   "name": "{{.project_name}}",
   "image": "mcr.microsoft.com/devcontainers/base:ubuntu",
+  "runArgs": [
+    "-p",
+    "6080:6080",
+    "-p",
+    "5900:5900"
+  ],
   "features": {
 %s  },
-  "postCreateCommand": "gh auth setup-git && echo 'Local template dev container ready!'",
+  "postCreateCommand": "gh auth setup-git{{if .enable_preview}} && sudo apt-get update && sudo apt-get install -y --no-install-recommends xvfb x11vnc novnc websockify openbox xterm{{end}} && echo 'Local template dev container ready!'",
   "remoteEnv": {
     "GH_TOKEN": "${localEnv:GH_TOKEN}"
   },
@@ -386,7 +396,10 @@ func hasTool(tools []string, tool string) bool {
 	return false
 }
 
-const previewConfigTemplate = `enabled: true
+const previewConfigTemplate = `# Preview runs inside the project devcontainer.
+# Ensure .devcontainer/devcontainer.json publishes 6080/5900 and includes
+# the GUI/noVNC tools when preview is enabled.
+enabled: true
 app_command: "echo \"Set preview app_command in .incubator/preview/config.yaml\" && sleep infinity"
 novnc_port: 6080
 vnc_port: 5900
@@ -426,28 +439,4 @@ else
 fi
 
 wait "${XVFB_PID}"
-`
-
-const previewDockerfileTemplate = `FROM ubuntu:24.04
-
-ENV DEBIAN_FRONTEND=noninteractive
-
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    xvfb \
-    x11vnc \
-    novnc \
-    websockify \
-    openbox \
-    xterm \
-    ca-certificates \
-    bash \
- && rm -rf /var/lib/apt/lists/*
-
-WORKDIR /workspace
-COPY .incubator/preview/entrypoint.sh /usr/local/bin/preview-entrypoint.sh
-RUN chmod +x /usr/local/bin/preview-entrypoint.sh
-
-EXPOSE 5900 6080
-
-ENTRYPOINT ["/usr/local/bin/preview-entrypoint.sh"]
 `

@@ -176,12 +176,13 @@ incubator preview .
 
 This command:
 - loads `.incubator/preview/config.yaml`
-- builds a local Docker image for preview
-- starts Xvfb + x11vnc + noVNC in a container
+- ensures the project devcontainer is running
+- starts Xvfb + x11vnc + noVNC inside that devcontainer
 - opens `http://localhost:<novnc_port>` in your default browser
 
 Notes:
-- Docker is required on the host machine.
+- The `devcontainer` CLI and Docker are required on the host machine.
+- Preview now reuses the same devcontainer runtime as development.
 - `app_command` in `.incubator/preview/config.yaml` controls what app/process runs in the virtual display.
 
 ## Dev Container Auth

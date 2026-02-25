@@ -14,8 +14,15 @@ import (
 )
 
 const (
-	configRelPath     = ".incubator/preview/config.yaml"
-	dockerfileRelPath = ".incubator/preview/Dockerfile"
+	configRelPath             = ".incubator/preview/config.yaml"
+	devcontainerConfigRelPath = ".devcontainer/devcontainer.json"
+	previewEntrypointRelPath  = ".incubator/preview/entrypoint.sh"
+)
+
+var (
+	lookPathCommand = exec.LookPath
+	runCommand      = runCmd
+	runOutput       = runCmdOutput
 )
 
 // Config controls the local noVNC preview runtime.
@@ -53,39 +60,35 @@ func Start(projectDir string, cfg *Config) (string, error) {
 	if !cfg.Enabled {
 		return "", errors.New("preview is disabled in config")
 	}
-
-	if _, err := os.Stat(filepath.Join(projectDir, dockerfileRelPath)); err != nil {
-		if os.IsNotExist(err) {
-			return "", fmt.Errorf("preview Dockerfile not found in %s", projectDir)
-		}
-		return "", fmt.Errorf("checking preview Dockerfile: %w", err)
-	}
-
-	if err := requireCommand("docker"); err != nil {
+	applyDefaults(cfg)
+	if err := validatePorts(cfg); err != nil {
 		return "", err
 	}
 
-	containerName := containerNameForProject(projectDir)
-	imageName := containerName + "-image"
-	if err := runCmd(projectDir, "docker", "build", "-t", imageName, "-f", dockerfileRelPath, "."); err != nil {
-		return "", fmt.Errorf("building preview image: %w", err)
+	if _, err := os.Stat(filepath.Join(projectDir, devcontainerConfigRelPath)); err != nil {
+		if os.IsNotExist(err) {
+			return "", fmt.Errorf("devcontainer config not found in %s", projectDir)
+		}
+		return "", fmt.Errorf("checking devcontainer config: %w", err)
 	}
 
-	// Remove an old container with the same name, if any.
-	_ = runCmd(projectDir, "docker", "rm", "-f", containerName)
+	if _, err := os.Stat(filepath.Join(projectDir, previewEntrypointRelPath)); err != nil {
+		if os.IsNotExist(err) {
+			return "", fmt.Errorf("preview entrypoint not found at %s", filepath.Join(projectDir, previewEntrypointRelPath))
+		}
+		return "", fmt.Errorf("checking preview entrypoint: %w", err)
+	}
 
-	if err := runCmd(projectDir, "docker",
-		"run", "-d",
-		"--name", containerName,
-		"-p", fmt.Sprintf("%d:%d", cfg.NoVNCPort, cfg.NoVNCPort),
-		"-p", fmt.Sprintf("%d:%d", cfg.VNCPort, cfg.VNCPort),
-		"-e", fmt.Sprintf("PREVIEW_APP_COMMAND=%s", cfg.AppCommand),
-		"-e", fmt.Sprintf("NOVNC_PORT=%d", cfg.NoVNCPort),
-		"-e", fmt.Sprintf("VNC_PORT=%d", cfg.VNCPort),
-		"-v", fmt.Sprintf("%s:/workspace", projectDir),
-		imageName,
-	); err != nil {
-		return "", fmt.Errorf("starting preview container: %w", err)
+	if err := requireCommand("devcontainer"); err != nil {
+		return "", err
+	}
+
+	if _, err := ensureDevcontainerUp(projectDir); err != nil {
+		return "", err
+	}
+
+	if err := startPreviewProcess(projectDir, cfg); err != nil {
+		return "", err
 	}
 
 	return fmt.Sprintf("http://localhost:%d", cfg.NoVNCPort), nil
@@ -114,20 +117,83 @@ func applyDefaults(cfg *Config) {
 	}
 }
 
-func containerNameForProject(projectDir string) string {
-	base := filepath.Base(projectDir)
-	safe := strings.ToLower(base)
-	safe = regexp.MustCompile(`[^a-z0-9_.-]+`).ReplaceAllString(safe, "-")
-	safe = regexp.MustCompile(`[-._]{2,}`).ReplaceAllString(safe, "-")
-	safe = strings.Trim(safe, "-._")
-	if safe == "" {
-		safe = "project"
+func ensureDevcontainerUp(projectDir string) (string, error) {
+	out, err := runOutput(projectDir, "devcontainer", "up", "--workspace-folder", projectDir, "--log-format", "json")
+	if err != nil {
+		return "", fmt.Errorf("starting devcontainer: %w", err)
 	}
-	return "sloth-preview-" + safe
+	containerID := containerIDFromUpOutput(out)
+	if containerID == "" {
+		containerID = containerIDForProject(projectDir)
+	}
+	if containerID == "" {
+		return "", errors.New("could not resolve devcontainer container ID after `devcontainer up`")
+	}
+	return containerID, nil
+}
+
+func startPreviewProcess(projectDir string, cfg *Config) error {
+	cmd := fmt.Sprintf(
+		"pkill -f '[x]11vnc -display' >/dev/null 2>&1 || true; "+
+			"pkill -f '[w]ebsockify --web' >/dev/null 2>&1 || true; "+
+			"pkill -f '[X]vfb :99' >/dev/null 2>&1 || true; "+
+			"nohup env PREVIEW_APP_COMMAND=%s NOVNC_PORT=%d VNC_PORT=%d bash .incubator/preview/entrypoint.sh >/tmp/incubator-preview.log 2>&1 &",
+		shellEscape(cfg.AppCommand),
+		cfg.NoVNCPort,
+		cfg.VNCPort,
+	)
+
+	if err := runCommand(projectDir, "devcontainer", "exec", "--workspace-folder", projectDir, "bash", "-lc", cmd); err != nil {
+		return fmt.Errorf("starting preview process in devcontainer: %w", err)
+	}
+	return nil
+}
+
+func containerIDForProject(projectDir string) string {
+	out, err := runOutput(projectDir, "docker", "ps", "--filter", fmt.Sprintf("label=devcontainer.local_folder=%s", projectDir), "--format", "{{.ID}}")
+	if err != nil {
+		return ""
+	}
+	lines := strings.Split(strings.TrimSpace(out), "\n")
+	for _, line := range lines {
+		id := strings.TrimSpace(line)
+		if id != "" {
+			return id
+		}
+	}
+	return ""
+}
+
+func containerIDFromUpOutput(out string) string {
+	matches := regexp.MustCompile(`"containerId"\s*:\s*"([a-f0-9]+)"`).FindAllStringSubmatch(out, -1)
+	if len(matches) == 0 {
+		return ""
+	}
+	return matches[len(matches)-1][1]
+}
+
+func shellEscape(value string) string {
+	if value == "" {
+		return "''"
+	}
+	return "'" + strings.ReplaceAll(value, "'", "'\"'\"'") + "'"
+}
+
+func validatePorts(cfg *Config) error {
+	if cfg.NoVNCPort < 1 || cfg.NoVNCPort > 65535 {
+		return fmt.Errorf("invalid novnc_port: %d", cfg.NoVNCPort)
+	}
+	if cfg.VNCPort < 1 || cfg.VNCPort > 65535 {
+		return fmt.Errorf("invalid vnc_port: %d", cfg.VNCPort)
+	}
+	if cfg.NoVNCPort == cfg.VNCPort {
+		return errors.New("novnc_port and vnc_port must be different")
+	}
+	return nil
 }
 
 func requireCommand(name string) error {
-	if _, err := exec.LookPath(name); err != nil {
+	if _, err := lookPathCommand(name); err != nil {
 		return fmt.Errorf("required command not found: %s", name)
 	}
 	return nil
@@ -142,4 +208,14 @@ func runCmd(dir, name string, args ...string) error {
 		return err
 	}
 	return nil
+}
+
+func runCmdOutput(dir, name string, args ...string) (string, error) {
+	cmd := exec.Command(name, args...)
+	cmd.Dir = dir
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return "", fmt.Errorf("%w: %s", err, string(out))
+	}
+	return string(out), nil
 }

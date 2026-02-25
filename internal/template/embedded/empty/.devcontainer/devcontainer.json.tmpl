@@ -1,10 +1,16 @@
 {
   "name": "{{.project_name}}",
   "image": "mcr.microsoft.com/devcontainers/base:ubuntu",
+  "runArgs": [
+    "-p",
+    "6080:6080",
+    "-p",
+    "5900:5900"
+  ],
   "features": {
     "ghcr.io/devcontainers/features/github-cli:1": {}
   },
-  "postCreateCommand": "gh auth setup-git && echo 'Dev container ready!'",
+  "postCreateCommand": "gh auth setup-git{{if .enable_preview}} && sudo apt-get update && sudo apt-get install -y --no-install-recommends xvfb x11vnc novnc websockify openbox xterm{{end}} && echo 'Dev container ready!'",
   "remoteEnv": {
     "GH_TOKEN": "${localEnv:GH_TOKEN}"
   },

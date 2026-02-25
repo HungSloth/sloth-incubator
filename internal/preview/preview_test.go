@@ -1,6 +1,7 @@
 package preview
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -50,22 +51,105 @@ func TestStartReturnsErrorForDisabledPreview(t *testing.T) {
 	}
 }
 
-func TestStartPreflightRequiresDockerfile(t *testing.T) {
+func TestStartPreflightRequiresDevcontainer(t *testing.T) {
 	projectDir := t.TempDir()
 	_, err := Start(projectDir, &Config{Enabled: true, NoVNCPort: 6080, VNCPort: 5900})
 	if err == nil {
-		t.Fatal("expected error when Dockerfile is missing")
+		t.Fatal("expected error when devcontainer is missing")
 	}
-	if !strings.Contains(err.Error(), "preview Dockerfile not found") {
-		t.Fatalf("expected missing Dockerfile error, got: %v", err)
+	if !strings.Contains(err.Error(), "devcontainer config not found") {
+		t.Fatalf("expected missing devcontainer error, got: %v", err)
 	}
 }
 
-func TestContainerNameForProjectSanitizesToLowercase(t *testing.T) {
-	projectDir := filepath.Join("/tmp", "Just a test")
-	got := containerNameForProject(projectDir)
-	want := "sloth-preview-just-a-test"
-	if got != want {
-		t.Fatalf("expected %q, got %q", want, got)
+func TestStartReturnsErrorWhenDevcontainerCLIIsMissing(t *testing.T) {
+	projectDir := writePreviewProject(t)
+
+	origLookPath := lookPathCommand
+	defer func() { lookPathCommand = origLookPath }()
+	lookPathCommand = func(name string) (string, error) {
+		return "", fmt.Errorf("not found")
 	}
+
+	_, err := Start(projectDir, &Config{Enabled: true, NoVNCPort: 6080, VNCPort: 5900})
+	if err == nil {
+		t.Fatal("expected error when devcontainer CLI is missing")
+	}
+	if !strings.Contains(err.Error(), "required command not found: devcontainer") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestStartUsesDevcontainerRuntime(t *testing.T) {
+	projectDir := writePreviewProject(t)
+
+	origLookPath := lookPathCommand
+	origRunOutput := runOutput
+	origRunCommand := runCommand
+	defer func() {
+		lookPathCommand = origLookPath
+		runOutput = origRunOutput
+		runCommand = origRunCommand
+	}()
+
+	lookPathCommand = func(name string) (string, error) { return "/usr/bin/" + name, nil }
+
+	upCalled := false
+	execCalled := false
+
+	runOutput = func(dir, name string, args ...string) (string, error) {
+		if name == "devcontainer" && len(args) >= 1 && args[0] == "up" {
+			upCalled = true
+			return `{"containerId":"abc123def456"}`, nil
+		}
+		return "", nil
+	}
+	runCommand = func(dir, name string, args ...string) error {
+		if name == "devcontainer" && len(args) >= 1 && args[0] == "exec" {
+			execCalled = true
+			if !strings.Contains(strings.Join(args, " "), ".incubator/preview/entrypoint.sh") {
+				t.Fatalf("expected preview entrypoint in exec command, got: %v", args)
+			}
+		}
+		return nil
+	}
+
+	url, err := Start(projectDir, &Config{
+		Enabled:    true,
+		AppCommand: "npm run dev",
+		NoVNCPort:  6080,
+		VNCPort:    5900,
+	})
+	if err != nil {
+		t.Fatalf("Start returned error: %v", err)
+	}
+	if url != "http://localhost:6080" {
+		t.Fatalf("unexpected URL %q", url)
+	}
+	if !upCalled {
+		t.Fatal("expected devcontainer up to be called")
+	}
+	if !execCalled {
+		t.Fatal("expected devcontainer exec to be called")
+	}
+}
+
+func writePreviewProject(t *testing.T) string {
+	t.Helper()
+	projectDir := t.TempDir()
+	devcontainerDir := filepath.Join(projectDir, ".devcontainer")
+	previewDir := filepath.Join(projectDir, ".incubator", "preview")
+	if err := os.MkdirAll(devcontainerDir, 0755); err != nil {
+		t.Fatalf("creating devcontainer dir: %v", err)
+	}
+	if err := os.MkdirAll(previewDir, 0755); err != nil {
+		t.Fatalf("creating preview dir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(devcontainerDir, "devcontainer.json"), []byte(`{"name":"test"}`), 0644); err != nil {
+		t.Fatalf("writing devcontainer config: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(previewDir, "entrypoint.sh"), []byte("#!/usr/bin/env bash\necho test\n"), 0755); err != nil {
+		t.Fatalf("writing preview entrypoint: %v", err)
+	}
+	return projectDir
 }
