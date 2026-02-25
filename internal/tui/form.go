@@ -133,10 +133,11 @@ func (m FormModel) Update(msg tea.Msg) (FormModel, tea.Cmd) {
 				if field.selectCursor > 0 {
 					field.selectCursor--
 				}
+				return m, nil
 			case template.PromptConfirm:
 				field.confirmValue = !field.confirmValue
+				return m, nil
 			}
-			return m, nil
 		case "right", "l":
 			// #region agent log
 			writeDebugLog("repro-1", "H1", "internal/tui/form.go:Update:119", "entered right/l handler", map[string]interface{}{
@@ -151,10 +152,11 @@ func (m FormModel) Update(msg tea.Msg) (FormModel, tea.Cmd) {
 				if field.selectCursor < len(field.selectOptions)-1 {
 					field.selectCursor++
 				}
+				return m, nil
 			case template.PromptConfirm:
 				field.confirmValue = !field.confirmValue
+				return m, nil
 			}
-			return m, nil
 		}
 	}
 
