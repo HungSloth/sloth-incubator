@@ -4,8 +4,10 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/HungSloth/sloth-incubator/internal/config"
+	"github.com/HungSloth/sloth-incubator/internal/container"
 	"github.com/HungSloth/sloth-incubator/internal/preview"
 	"github.com/HungSloth/sloth-incubator/internal/template"
 	"github.com/HungSloth/sloth-incubator/internal/tui"
@@ -178,7 +180,68 @@ func main() {
 		},
 	}
 
-	rootCmd.AddCommand(newCmd, listCmd, versionCmd, updateCmd, configCmd, addRepoCmd, createTemplateCmd, previewCmd)
+	var cleanList bool
+	var cleanStopped bool
+	var cleanAll bool
+	var cleanDryRun bool
+	var cleanVolumes bool
+
+	cleanCmd := &cobra.Command{
+		Use:   "clean",
+		Short: "Clean up devcontainers created for projects",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			modeCount := 0
+			for _, enabled := range []bool{cleanList, cleanStopped, cleanAll} {
+				if enabled {
+					modeCount++
+				}
+			}
+			if modeCount > 1 {
+				return fmt.Errorf("use only one of --list, --stopped, or --all")
+			}
+
+			containers, err := container.List()
+			if err != nil {
+				return err
+			}
+
+			if cleanList {
+				printDevcontainers(containers)
+				return nil
+			}
+
+			if len(containers) == 0 {
+				fmt.Println("No devcontainers found.")
+				return nil
+			}
+
+			if cleanStopped {
+				targets := filterStopped(containers)
+				return cleanupContainers(targets, cleanVolumes, cleanDryRun, false)
+			}
+
+			if cleanAll {
+				return cleanupContainers(containers, cleanVolumes, cleanDryRun, true)
+			}
+
+			selected, cancelled, err := tui.RunCleanSelection(containers)
+			if err != nil {
+				return err
+			}
+			if cancelled {
+				fmt.Println("Cleanup cancelled.")
+				return nil
+			}
+			return cleanupContainers(selected, cleanVolumes, cleanDryRun, true)
+		},
+	}
+	cleanCmd.Flags().BoolVar(&cleanList, "list", false, "List devcontainers and exit")
+	cleanCmd.Flags().BoolVar(&cleanStopped, "stopped", false, "Remove only stopped devcontainers")
+	cleanCmd.Flags().BoolVar(&cleanAll, "all", false, "Stop and remove all devcontainers")
+	cleanCmd.Flags().BoolVar(&cleanDryRun, "dry-run", false, "Show planned actions without making changes")
+	cleanCmd.Flags().BoolVar(&cleanVolumes, "volumes", false, "Also remove container volumes")
+
+	rootCmd.AddCommand(newCmd, listCmd, versionCmd, updateCmd, configCmd, addRepoCmd, createTemplateCmd, previewCmd, cleanCmd)
 
 	if err := rootCmd.Execute(); err != nil {
 		os.Exit(1)
@@ -218,4 +281,77 @@ func loadAllTemplates(cfg *config.Config) []*template.TemplateManifest {
 	}
 
 	return manifests
+}
+
+func printDevcontainers(containers []container.DevContainer) {
+	if len(containers) == 0 {
+		fmt.Println("No devcontainers found.")
+		return
+	}
+
+	fmt.Printf("%-14s %-22s %-24s %s\n", "CONTAINER ID", "NAME", "STATUS", "PROJECT")
+	for _, c := range containers {
+		id := c.ID
+		if len(id) > 12 {
+			id = id[:12]
+		}
+		fmt.Printf("%-14s %-22s %-24s %s\n", id, c.Name, c.Status, c.ProjectDir)
+	}
+}
+
+func filterStopped(containers []container.DevContainer) []container.DevContainer {
+	stopped := make([]container.DevContainer, 0, len(containers))
+	for _, c := range containers {
+		if !isRunningStatus(c.Status) {
+			stopped = append(stopped, c)
+		}
+	}
+	return stopped
+}
+
+func cleanupContainers(containers []container.DevContainer, removeVolumes, dryRun, stopRunning bool) error {
+	if len(containers) == 0 {
+		fmt.Println("No matching devcontainers found.")
+		return nil
+	}
+
+	removed := 0
+	stopped := 0
+	for _, c := range containers {
+		running := isRunningStatus(c.Status)
+		if running && stopRunning {
+			if dryRun {
+				fmt.Printf("[dry-run] docker stop %s (%s)\n", c.ID, c.Name)
+			} else {
+				if err := container.Stop(c.ID); err != nil {
+					return err
+				}
+			}
+			stopped++
+		}
+
+		if dryRun {
+			if removeVolumes {
+				fmt.Printf("[dry-run] docker rm -v %s (%s)\n", c.ID, c.Name)
+			} else {
+				fmt.Printf("[dry-run] docker rm %s (%s)\n", c.ID, c.Name)
+			}
+		} else {
+			if err := container.Remove(c.ID, removeVolumes); err != nil {
+				return err
+			}
+		}
+		removed++
+	}
+
+	if dryRun {
+		fmt.Printf("Dry run complete: %d container(s) would be removed (%d would be stopped first).\n", removed, stopped)
+		return nil
+	}
+	fmt.Printf("Cleanup complete: removed %d container(s), stopped %d running container(s).\n", removed, stopped)
+	return nil
+}
+
+func isRunningStatus(status string) bool {
+	return strings.HasPrefix(status, "Up ") || strings.HasPrefix(status, "Restarting")
 }

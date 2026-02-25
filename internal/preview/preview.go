@@ -10,6 +10,7 @@ import (
 	"runtime"
 	"strings"
 
+	"github.com/HungSloth/sloth-incubator/internal/container"
 	"gopkg.in/yaml.v3"
 )
 
@@ -124,7 +125,7 @@ func ensureDevcontainerUp(projectDir string) (string, error) {
 	}
 	containerID := containerIDFromUpOutput(out)
 	if containerID == "" {
-		containerID = containerIDForProject(projectDir)
+		containerID = container.ContainerIDForProject(projectDir)
 	}
 	if containerID == "" {
 		return "", errors.New("could not resolve devcontainer container ID after `devcontainer up`")
@@ -147,21 +148,6 @@ func startPreviewProcess(projectDir string, cfg *Config) error {
 		return fmt.Errorf("starting preview process in devcontainer: %w", err)
 	}
 	return nil
-}
-
-func containerIDForProject(projectDir string) string {
-	out, err := runOutput(projectDir, "docker", "ps", "--filter", fmt.Sprintf("label=devcontainer.local_folder=%s", projectDir), "--format", "{{.ID}}")
-	if err != nil {
-		return ""
-	}
-	lines := strings.Split(strings.TrimSpace(out), "\n")
-	for _, line := range lines {
-		id := strings.TrimSpace(line)
-		if id != "" {
-			return id
-		}
-	}
-	return ""
 }
 
 func containerIDFromUpOutput(out string) string {

@@ -29,6 +29,10 @@ incubator config --show  # Print current config
 incubator add-repo <url> # Add a community template repository
 incubator create-template <name> # Create a local template scaffold
 incubator preview [project-dir] # Start local noVNC preview
+incubator clean      # Interactive devcontainer cleanup
+incubator clean --list
+incubator clean --stopped
+incubator clean --all --volumes
 ```
 
 ### Creating a Project
@@ -184,6 +188,29 @@ Notes:
 - The `devcontainer` CLI and Docker are required on the host machine.
 - Preview now reuses the same devcontainer runtime as development.
 - `app_command` in `.incubator/preview/config.yaml` controls what app/process runs in the virtual display.
+
+### Devcontainer Cleanup
+
+Incubator includes a built-in cleanup command for devcontainers:
+
+```bash
+# Interactive multi-select cleanup
+incubator clean
+
+# List discovered devcontainers
+incubator clean --list
+
+# Remove only stopped devcontainers
+incubator clean --stopped
+
+# Stop and remove all devcontainers (also remove volumes)
+incubator clean --all --volumes
+
+# Preview planned actions without changing anything
+incubator clean --all --dry-run
+```
+
+`incubator clean` discovers devcontainers using Docker's `devcontainer.local_folder` label.
 
 ## Dev Container Auth
 
