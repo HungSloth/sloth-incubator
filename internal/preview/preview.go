@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 )
@@ -115,7 +116,10 @@ func applyDefaults(cfg *Config) {
 
 func containerNameForProject(projectDir string) string {
 	base := filepath.Base(projectDir)
-	safe := regexp.MustCompile(`[^a-zA-Z0-9_.-]+`).ReplaceAllString(base, "-")
+	safe := strings.ToLower(base)
+	safe = regexp.MustCompile(`[^a-z0-9_.-]+`).ReplaceAllString(safe, "-")
+	safe = regexp.MustCompile(`[-._]{2,}`).ReplaceAllString(safe, "-")
+	safe = strings.Trim(safe, "-._")
 	if safe == "" {
 		safe = "project"
 	}

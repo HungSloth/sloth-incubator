@@ -60,3 +60,12 @@ func TestStartPreflightRequiresDockerfile(t *testing.T) {
 		t.Fatalf("expected missing Dockerfile error, got: %v", err)
 	}
 }
+
+func TestContainerNameForProjectSanitizesToLowercase(t *testing.T) {
+	projectDir := filepath.Join("/tmp", "Just a test")
+	got := containerNameForProject(projectDir)
+	want := "sloth-preview-just-a-test"
+	if got != want {
+		t.Fatalf("expected %q, got %q", want, got)
+	}
+}
