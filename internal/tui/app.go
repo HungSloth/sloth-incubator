@@ -60,6 +60,14 @@ func (a App) Init() tea.Cmd {
 func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
+		if a.screen == ScreenForm {
+			// #region agent log
+			writeDebugLog("repro-1", "H4", "internal/tui/app.go:Update:62", "app received key while on form screen", map[string]interface{}{
+				"key":    msg.String(),
+				"screen": "form",
+			})
+			// #endregion
+		}
 		switch msg.String() {
 		case "ctrl+c":
 			a.quitting = true

@@ -1,8 +1,11 @@
 package tui
 
 import (
+	"encoding/json"
 	"fmt"
+	"os"
 	"strings"
+	"time"
 
 	"github.com/HungSloth/sloth-incubator/internal/template"
 	"github.com/charmbracelet/bubbles/textinput"
@@ -89,6 +92,17 @@ func (m FormModel) Init() tea.Cmd {
 func (m FormModel) Update(msg tea.Msg) (FormModel, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
+		fieldType := "unknown"
+		if m.cursor >= 0 && m.cursor < len(m.fields) {
+			fieldType = string(m.fields[m.cursor].prompt.Type)
+		}
+		// #region agent log
+		writeDebugLog("repro-1", "H1", "internal/tui/form.go:Update:90", "form received key", map[string]interface{}{
+			"key":       msg.String(),
+			"cursor":    m.cursor,
+			"fieldType": fieldType,
+		})
+		// #endregion
 		switch msg.String() {
 		case "tab", "down":
 			return m.nextField()
@@ -105,6 +119,13 @@ func (m FormModel) Update(msg tea.Msg) (FormModel, tea.Cmd) {
 		case "esc":
 			return m, func() tea.Msg { return formBackMsg{} }
 		case "left", "h":
+			// #region agent log
+			writeDebugLog("repro-1", "H1", "internal/tui/form.go:Update:107", "entered left/h handler", map[string]interface{}{
+				"key":       msg.String(),
+				"cursor":    m.cursor,
+				"fieldType": fieldType,
+			})
+			// #endregion
 			// For select and confirm fields
 			field := &m.fields[m.cursor]
 			switch field.prompt.Type {
@@ -117,6 +138,13 @@ func (m FormModel) Update(msg tea.Msg) (FormModel, tea.Cmd) {
 			}
 			return m, nil
 		case "right", "l":
+			// #region agent log
+			writeDebugLog("repro-1", "H1", "internal/tui/form.go:Update:119", "entered right/l handler", map[string]interface{}{
+				"key":       msg.String(),
+				"cursor":    m.cursor,
+				"fieldType": fieldType,
+			})
+			// #endregion
 			field := &m.fields[m.cursor]
 			switch field.prompt.Type {
 			case template.PromptSelect:
@@ -133,7 +161,19 @@ func (m FormModel) Update(msg tea.Msg) (FormModel, tea.Cmd) {
 	// Update the focused text input
 	if m.cursor < len(m.fields) && m.fields[m.cursor].prompt.Type == template.PromptText {
 		var cmd tea.Cmd
+		before := m.fields[m.cursor].textInput.Value()
 		m.fields[m.cursor].textInput, cmd = m.fields[m.cursor].textInput.Update(msg)
+		after := m.fields[m.cursor].textInput.Value()
+		if keyMsg, ok := msg.(tea.KeyMsg); ok {
+			// #region agent log
+			writeDebugLog("repro-1", "H2", "internal/tui/form.go:Update:136", "text input update result", map[string]interface{}{
+				"key":          keyMsg.String(),
+				"beforeLen":    len(before),
+				"afterLen":     len(after),
+				"valueChanged": before != after,
+			})
+			// #endregion
+		}
 		return m, cmd
 	}
 
@@ -255,4 +295,30 @@ func (m FormModel) View() string {
 	b.WriteString(helpStyle.Render("\n  tab/↓ next • shift+tab/↑ prev • ←/→ change • enter confirm • esc back"))
 
 	return b.String()
+}
+
+func writeDebugLog(runID, hypothesisID, location, message string, data map[string]interface{}) {
+	entry := map[string]interface{}{
+		"sessionId":    "a1bd86",
+		"runId":        runID,
+		"hypothesisId": hypothesisID,
+		"location":     location,
+		"message":      message,
+		"data":         data,
+		"timestamp":    timeNowMillis(),
+	}
+	payload, err := json.Marshal(entry)
+	if err != nil {
+		return
+	}
+	f, err := os.OpenFile("/workspaces/sloth-incubator/.cursor/debug-a1bd86.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		return
+	}
+	defer f.Close()
+	_, _ = f.Write(append(payload, '\n'))
+}
+
+func timeNowMillis() int64 {
+	return time.Now().UnixMilli()
 }
