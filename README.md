@@ -27,12 +27,18 @@ incubator update     # Refresh templates from remote repos
 incubator config     # Edit configuration interactively
 incubator config --show  # Print current config
 incubator add-repo <url> # Add a community template repository
+incubator create-template <name> # Create a local template scaffold
 incubator preview [project-dir] # Start local noVNC preview
 ```
 
 ### Creating a Project
 
-Run `incubator` (or `incubator new`) and the TUI walks you through:
+Run `incubator` (or `incubator new`) and the TUI starts with a main menu:
+
+1. **Create Project** — the existing project scaffolding flow
+2. **Create Template** — a local template wizard (base, software, tools)
+
+If you choose **Create Project**, the flow is:
 
 1. **Pick a template** — choose from built-in and remote templates
 2. **Answer prompts** — project name, description, visibility, license, whether to create a GitHub repo, and optional preview tooling
@@ -52,6 +58,7 @@ Config is stored at `~/.incubator/config.yaml` and is created automatically on f
 | `default_visibility` | `private` | Default repo visibility |
 | `default_license` | `MIT` | Default license |
 | `project_dir` | `~/projects` | Where new projects are created |
+| `local_template_dir` | `~/.incubator/local-templates` | Where local templates are stored |
 | `editor` | `none` | Editor to open after scaffolding |
 | `template_repo` | `HungSloth/incubator-templates` | Primary remote template repository |
 | `template_repos` | `[]` | Additional community template repos |
@@ -79,6 +86,40 @@ incubator add-repo owner/repo-name
 # Refresh templates
 incubator update
 ```
+
+### Local Template Creator
+
+You can scaffold and maintain templates locally, without publishing a repo first:
+
+```bash
+# Create a starter template in ~/.incubator/local-templates/my-template
+incubator create-template my-template
+```
+
+This generates:
+
+- `template.yaml` (manifest + prompts)
+- `files/` (template source files rendered during `incubator new`)
+- Ubuntu devcontainer starter with `gh`, `node`, `python`, `go`, and `rust`
+- `.incubator/preview/` assets for the built-in virtual display workflow
+
+After creating a local template:
+
+1. Edit `template.yaml` and files under `files/`.
+2. Run `incubator list` to confirm it appears.
+3. Use it from `incubator` / `incubator new` like any other template.
+
+### Template Creator Wizard (TUI)
+
+From the TUI main menu, choose **Create Template** to launch the interactive wizard.
+
+The wizard creates a local reusable template in `~/.incubator/local-templates/<name>` and guides you through:
+
+1. Template name and description
+2. Base preset selection
+3. Software preset selection
+4. Tool selection (multi-select), including optional devcontainer and preview assets
+5. Review and generate
 
 ### Template Manifest Format
 
