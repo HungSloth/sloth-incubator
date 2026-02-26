@@ -18,7 +18,7 @@ $version = $release.tag_name
 Write-Host "Latest version: $version"
 
 # Download
-$assetName = "${binaryName}_windows_${arch}.tar.gz"
+$assetName = "${binaryName}_windows_${arch}.zip"
 $asset = $release.assets | Where-Object { $_.name -eq $assetName }
 
 if (-not $asset) {
@@ -34,8 +34,8 @@ $tmpFile = Join-Path $tmpDir $assetName
 
 Invoke-WebRequest -Uri $downloadUrl -OutFile $tmpFile
 
-# Extract (requires tar, available in Windows 10+)
-tar -xzf $tmpFile -C $tmpDir
+# Extract ZIP release artifact
+Expand-Archive -Path $tmpFile -DestinationPath $tmpDir -Force
 
 # Install
 New-Item -ItemType Directory -Path $installDir -Force | Out-Null
