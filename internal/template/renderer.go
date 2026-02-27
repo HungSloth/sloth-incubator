@@ -13,6 +13,8 @@ import (
 type Renderer struct {
 	manifest *TemplateManifest
 	answers  map[string]interface{}
+	// SkipExisting avoids overwriting files that are already present.
+	SkipExisting bool
 }
 
 // NewRenderer creates a new template renderer
@@ -70,6 +72,14 @@ func (r *Renderer) RenderTo(targetDir string, sourceFS fs.FS) error {
 		// Ensure parent directory exists
 		if err := os.MkdirAll(filepath.Dir(targetPath), 0755); err != nil {
 			return err
+		}
+
+		if r.SkipExisting {
+			if _, err := os.Stat(targetPath); err == nil {
+				return nil
+			} else if !os.IsNotExist(err) {
+				return err
+			}
 		}
 
 		return os.WriteFile(targetPath, content, 0644)

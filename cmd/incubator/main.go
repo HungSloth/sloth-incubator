@@ -35,6 +35,30 @@ func main() {
 		},
 	}
 
+	initCmd := &cobra.Command{
+		Use:   "init [path]",
+		Short: "Add incubator scaffolding to an existing project",
+		Args:  cobra.MaximumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			targetDir := "."
+			if len(args) == 1 {
+				targetDir = args[0]
+			}
+			absDir, err := filepath.Abs(targetDir)
+			if err != nil {
+				return fmt.Errorf("resolving target directory: %w", err)
+			}
+			info, err := os.Stat(absDir)
+			if err != nil {
+				return fmt.Errorf("reading target directory: %w", err)
+			}
+			if !info.IsDir() {
+				return fmt.Errorf("target path is not a directory: %s", absDir)
+			}
+			return launchInitTUI(absDir)
+		},
+	}
+
 	listCmd := &cobra.Command{
 		Use:   "list",
 		Short: "List available templates",
@@ -241,7 +265,7 @@ func main() {
 	cleanCmd.Flags().BoolVar(&cleanDryRun, "dry-run", false, "Show planned actions without making changes")
 	cleanCmd.Flags().BoolVar(&cleanVolumes, "volumes", false, "Also remove container volumes")
 
-	rootCmd.AddCommand(newCmd, listCmd, versionCmd, updateCmd, configCmd, addRepoCmd, createTemplateCmd, previewCmd, cleanCmd)
+	rootCmd.AddCommand(newCmd, initCmd, listCmd, versionCmd, updateCmd, configCmd, addRepoCmd, createTemplateCmd, previewCmd, cleanCmd)
 
 	if err := rootCmd.Execute(); err != nil {
 		os.Exit(1)
@@ -252,6 +276,14 @@ func launchTUI() error {
 	cfg, _ := config.Load()
 	manifests := loadAllTemplates(cfg)
 	p := tea.NewProgram(tui.NewApp(manifests, cfg), tea.WithAltScreen())
+	_, err := p.Run()
+	return err
+}
+
+func launchInitTUI(initDir string) error {
+	cfg, _ := config.Load()
+	manifests := loadAllTemplates(cfg)
+	p := tea.NewProgram(tui.NewInitApp(manifests, cfg, initDir), tea.WithAltScreen())
 	_, err := p.Run()
 	return err
 }

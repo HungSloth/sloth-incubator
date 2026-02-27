@@ -2,6 +2,8 @@ package tui
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/HungSloth/sloth-incubator/internal/config"
@@ -11,13 +13,17 @@ import (
 
 // ConfirmModel handles the confirmation screen
 type ConfirmModel struct {
-	manifest *template.TemplateManifest
-	answers  map[string]interface{}
-	files    []string
+	manifest      *template.TemplateManifest
+	answers       map[string]interface{}
+	files         []string
+	initMode      bool
+	targetDir     string
+	newFiles      []string
+	existingFiles []string
 }
 
 // NewConfirmModel creates a new confirmation model
-func NewConfirmModel(manifest *template.TemplateManifest, answers map[string]interface{}, cfg *config.Config) ConfirmModel {
+func NewConfirmModel(manifest *template.TemplateManifest, answers map[string]interface{}, cfg *config.Config, initMode bool, targetDir string) ConfirmModel {
 	// Get the list of files from the selected template source.
 	renderer := template.NewRenderer(manifest, answers)
 	templateRepo := config.DefaultConfig().TemplateRepo
@@ -30,10 +36,27 @@ func NewConfirmModel(manifest *template.TemplateManifest, answers map[string]int
 		files, _ = renderer.ListFiles(templateFS)
 	}
 
+	newFiles := make([]string, 0, len(files))
+	existingFiles := make([]string, 0, len(files))
+	if initMode && targetDir != "" {
+		for _, f := range files {
+			targetPath := filepath.Join(targetDir, f)
+			if _, err := os.Stat(targetPath); err == nil {
+				existingFiles = append(existingFiles, f)
+			} else {
+				newFiles = append(newFiles, f)
+			}
+		}
+	}
+
 	return ConfirmModel{
-		manifest: manifest,
-		answers:  answers,
-		files:    files,
+		manifest:      manifest,
+		answers:       answers,
+		files:         files,
+		initMode:      initMode,
+		targetDir:     targetDir,
+		newFiles:      newFiles,
+		existingFiles: existingFiles,
 	}
 }
 
@@ -60,7 +83,11 @@ func (m ConfirmModel) View() string {
 	var b strings.Builder
 
 	// Header
-	header := headerStyle.Render("  Ready to create")
+	headerText := "  Ready to create"
+	if m.initMode {
+		headerText = "  Ready to initialize"
+	}
+	header := headerStyle.Render(headerText)
 	b.WriteString(header)
 	b.WriteString("\n\n")
 
@@ -79,7 +106,20 @@ func (m ConfirmModel) View() string {
 	}
 
 	// Files
-	if len(m.files) > 0 {
+	if m.initMode {
+		if len(m.newFiles) > 0 {
+			b.WriteString(fmt.Sprintf("\n  %s\n", titleStyle.Render("Files to create:")))
+			for _, f := range m.newFiles {
+				b.WriteString(fmt.Sprintf("    %s\n", mutedStyle.Render(f)))
+			}
+		}
+		if len(m.existingFiles) > 0 {
+			b.WriteString(fmt.Sprintf("\n  %s\n", titleStyle.Render("Existing files (skipped):")))
+			for _, f := range m.existingFiles {
+				b.WriteString(fmt.Sprintf("    %s %s\n", mutedStyle.Render(f), mutedStyle.Render("(skip)")))
+			}
+		}
+	} else if len(m.files) > 0 {
 		b.WriteString(fmt.Sprintf("\n  %s\n", titleStyle.Render("Files to create:")))
 		for _, f := range m.files {
 			b.WriteString(fmt.Sprintf("    %s\n", mutedStyle.Render(f)))

@@ -2,7 +2,9 @@ package git
 
 import (
 	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
 )
 
 // CheckGitAvailable checks if git is available on PATH
@@ -29,6 +31,17 @@ func InitRepo(dir string) error {
 
 // InitialCommit stages all files and creates the initial commit
 func InitialCommit(dir string) error {
+	return CommitAll(dir, "Initial commit from sloth-incubator")
+}
+
+// HasRepo reports whether the directory already has a git repository.
+func HasRepo(dir string) bool {
+	info, err := os.Stat(filepath.Join(dir, ".git"))
+	return err == nil && info.IsDir()
+}
+
+// CommitAll stages all files and creates a commit with the given message.
+func CommitAll(dir, message string) error {
 	// git add .
 	addCmd := exec.Command("git", "add", ".")
 	addCmd.Dir = dir
@@ -37,7 +50,7 @@ func InitialCommit(dir string) error {
 	}
 
 	// git commit
-	commitCmd := exec.Command("git", "commit", "-m", "Initial commit from sloth-incubator")
+	commitCmd := exec.Command("git", "commit", "-m", message)
 	commitCmd.Dir = dir
 	if output, err := commitCmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("git commit failed: %s: %w", string(output), err)

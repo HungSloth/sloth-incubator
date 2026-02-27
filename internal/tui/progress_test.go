@@ -13,7 +13,7 @@ func TestNewProgressModelSkipsGitHubStepsWhenDisabled(t *testing.T) {
 		"create_github_repo": false,
 	}
 
-	model := NewProgressModel(manifest, answers, nil)
+	model := NewProgressModel(manifest, answers, nil, false, "")
 	if len(model.steps) != 3 {
 		t.Fatalf("expected 3 steps when GitHub is disabled, got %d", len(model.steps))
 	}
@@ -31,7 +31,7 @@ func TestNewProgressModelIncludesGitHubStepsByDefault(t *testing.T) {
 		"project_name": "demo",
 	}
 
-	model := NewProgressModel(manifest, answers, nil)
+	model := NewProgressModel(manifest, answers, nil, false, "")
 	if len(model.steps) != 5 {
 		t.Fatalf("expected 5 steps by default, got %d", len(model.steps))
 	}

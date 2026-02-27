@@ -14,10 +14,11 @@ type DoneModel struct {
 	projectDir string
 	repoURL    string
 	editor     string
+	initMode   bool
 }
 
 // NewDoneModel creates a new done model
-func NewDoneModel(projectDir, repoURL string) DoneModel {
+func NewDoneModel(projectDir, repoURL string, initMode bool) DoneModel {
 	editor := "none"
 	if cfg, err := config.Load(); err == nil {
 		editor = cfg.Editor
@@ -27,6 +28,7 @@ func NewDoneModel(projectDir, repoURL string) DoneModel {
 		projectDir: projectDir,
 		repoURL:    repoURL,
 		editor:     editor,
+		initMode:   initMode,
 	}
 }
 
@@ -86,7 +88,11 @@ func (m DoneModel) View() string {
 	var b strings.Builder
 
 	b.WriteString("\n")
-	b.WriteString(successStyle.Render("  Project is ready!"))
+	header := "  Project is ready!"
+	if m.initMode {
+		header = "  Project initialized!"
+	}
+	b.WriteString(successStyle.Render(header))
 	b.WriteString("\n\n")
 
 	b.WriteString(fmt.Sprintf("  %s  %s\n", labelStyle.Render("Local:"), valueStyle.Render(m.projectDir)))

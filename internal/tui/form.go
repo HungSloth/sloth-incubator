@@ -30,8 +30,13 @@ type FormModel struct {
 	cursor   int // which field is focused
 }
 
-// NewFormModel creates a new form from a template manifest
-func NewFormModel(manifest *template.TemplateManifest) FormModel {
+// NewFormModel creates a new form from a template manifest.
+func NewFormModel(manifest *template.TemplateManifest, defaults ...map[string]interface{}) FormModel {
+	var providedDefaults map[string]interface{}
+	if len(defaults) > 0 {
+		providedDefaults = defaults[0]
+	}
+
 	fields := make([]FormField, len(manifest.Prompts))
 
 	for i, p := range manifest.Prompts {
@@ -43,7 +48,12 @@ func NewFormModel(manifest *template.TemplateManifest) FormModel {
 		case template.PromptText:
 			ti := textinput.New()
 			ti.Placeholder = p.Label
-			if p.Default != nil {
+			if providedDefaults != nil {
+				if value, ok := providedDefaults[p.Name]; ok {
+					ti.SetValue(fmt.Sprintf("%v", value))
+				}
+			}
+			if ti.Value() == "" && p.Default != nil {
 				ti.SetValue(fmt.Sprintf("%v", p.Default))
 			}
 			if i == 0 {

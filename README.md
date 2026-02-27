@@ -21,6 +21,7 @@ Installs the `incubator` binary to `~/.local/bin` (Linux/macOS) or `%LOCALAPPDAT
 ```bash
 incubator            # Launch the interactive TUI
 incubator new        # Same as above — create a new project
+incubator init [path] # Add incubator scaffolding to an existing project
 incubator list       # List available templates
 incubator version    # Print the installed version
 incubator update     # Refresh templates from remote repos
@@ -51,6 +52,27 @@ If you choose **Create Project**, the flow is:
 5. **GitHub (optional)** — if you selected repo creation, Incubator creates the remote repo and pushes `HEAD`
 
 Projects are created under `~/projects/` by default (configurable).
+
+### Adding incubator to an existing project
+
+If you already have a project folder, use `incubator init` to scaffold in-place:
+
+```bash
+cd /path/to/existing-project
+incubator init
+# or
+incubator init /path/to/existing-project
+```
+
+The init flow:
+
+1. **Pick a template** — same picker as `incubator new`
+2. **Answer prompts** — `project_name` is pre-filled from the directory name (still editable)
+3. **Confirm** — see which files will be created and which already exist (and will be skipped)
+4. **Scaffold** — template files are written. Existing files are never overwritten
+5. **Git** — if `.git` exists, a commit is created with the new files; otherwise `git init` + initial commit
+
+GitHub repo creation and push are skipped — the project already exists.
 
 ## Configuration
 

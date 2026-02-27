@@ -34,6 +34,7 @@ const (
 	stepCreateProjectDir = "Creating project directory"
 	stepRenderTemplates  = "Rendering templates"
 	stepInitGitRepo      = "Initializing git repo"
+	stepCommitScaffold   = "Committing scaffold files"
 	stepCreateGitHubRepo = "Creating GitHub repo"
 	stepPushToOrigin     = "Pushing to origin"
 )
@@ -51,6 +52,8 @@ type ProgressModel struct {
 
 	projectDir string
 	repoURL    string
+	initMode   bool
+	initDir    string
 }
 
 // Step result messages
@@ -64,16 +67,20 @@ type stepErrorMsg struct {
 }
 
 // NewProgressModel creates a new progress model
-func NewProgressModel(manifest *template.TemplateManifest, answers map[string]interface{}, cfg *config.Config) ProgressModel {
+func NewProgressModel(manifest *template.TemplateManifest, answers map[string]interface{}, cfg *config.Config, initMode bool, initDir string) ProgressModel {
 	s := spinner.New()
 	s.Spinner = spinner.Dot
 
 	steps := []ProgressStep{
-		{Name: stepCreateProjectDir, Status: StepPending},
 		{Name: stepRenderTemplates, Status: StepPending},
-		{Name: stepInitGitRepo, Status: StepPending},
 	}
-	if shouldCreateGitHubRepo(answers) {
+	if initMode {
+		steps = append(steps, ProgressStep{Name: stepCommitScaffold, Status: StepPending})
+	} else {
+		steps = append([]ProgressStep{{Name: stepCreateProjectDir, Status: StepPending}}, steps...)
+		steps = append(steps, ProgressStep{Name: stepInitGitRepo, Status: StepPending})
+	}
+	if !initMode && shouldCreateGitHubRepo(answers) {
 		steps = append(steps,
 			ProgressStep{Name: stepCreateGitHubRepo, Status: StepPending},
 			ProgressStep{Name: stepPushToOrigin, Status: StepPending},
@@ -87,6 +94,8 @@ func NewProgressModel(manifest *template.TemplateManifest, answers map[string]in
 		steps:    steps,
 		current: 0,
 		spinner: s,
+		initMode: initMode,
+		initDir:  initDir,
 	}
 }
 
@@ -172,14 +181,19 @@ func (m ProgressModel) runCurrentStep() tea.Cmd {
 	answers := m.answers
 	manifest := m.manifest
 	cfg := m.cfg
+	initMode := m.initMode
+	initDir := m.initDir
 
 	return func() tea.Msg {
-		projectName := fmt.Sprintf("%v", answers["project_name"])
-		baseDir := filepath.Join(os.Getenv("HOME"), "projects")
-		if cfg != nil {
-			baseDir = cfg.GetProjectDir()
+		projectDir := initDir
+		if !initMode {
+			projectName := fmt.Sprintf("%v", answers["project_name"])
+			baseDir := filepath.Join(os.Getenv("HOME"), "projects")
+			if cfg != nil {
+				baseDir = cfg.GetProjectDir()
+			}
+			projectDir = filepath.Join(baseDir, projectName)
 		}
-		projectDir := filepath.Join(baseDir, projectName)
 		stepName := m.steps[step].Name
 
 		switch stepName {
@@ -191,6 +205,7 @@ func (m ProgressModel) runCurrentStep() tea.Cmd {
 
 		case stepRenderTemplates:
 			renderer := template.NewRenderer(manifest, answers)
+			renderer.SkipExisting = initMode
 			templateRepo := config.DefaultConfig().TemplateRepo
 			if cfg != nil && cfg.TemplateRepo != "" {
 				templateRepo = cfg.TemplateRepo
@@ -213,11 +228,30 @@ func (m ProgressModel) runCurrentStep() tea.Cmd {
 			}
 			return stepDoneMsg{}
 
+		case stepCommitScaffold:
+			if git.HasRepo(projectDir) {
+				if err := git.CommitAll(projectDir, "Add incubator scaffolding"); err != nil {
+					if strings.Contains(err.Error(), "nothing to commit") {
+						return stepDoneMsg{}
+					}
+					return stepErrorMsg{err: err}
+				}
+				return stepDoneMsg{}
+			}
+			if err := git.InitRepo(projectDir); err != nil {
+				return stepErrorMsg{err: err}
+			}
+			if err := git.InitialCommit(projectDir); err != nil {
+				return stepErrorMsg{err: err}
+			}
+			return stepDoneMsg{}
+
 		case stepCreateGitHubRepo:
 			if !shouldCreateGitHubRepo(answers) {
 				return stepDoneMsg{}
 			}
 
+			projectName := fmt.Sprintf("%v", answers["project_name"])
 			visibility := "private"
 			if v, ok := answers["visibility"]; ok {
 				visibility = fmt.Sprintf("%v", v)
@@ -249,8 +283,9 @@ func (m ProgressModel) runCurrentStep() tea.Cmd {
 func (m ProgressModel) progressPercent() float64 {
 	weights := map[string]float64{
 		stepCreateProjectDir: 0.10,
-		stepRenderTemplates:  0.20,
+		stepRenderTemplates:  0.30,
 		stepInitGitRepo:      0.10,
+		stepCommitScaffold:   0.20,
 		stepCreateGitHubRepo: 0.40,
 		stepPushToOrigin:     0.20,
 	}

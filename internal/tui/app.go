@@ -1,6 +1,8 @@
 package tui
 
 import (
+	"path/filepath"
+
 	"github.com/HungSloth/sloth-incubator/internal/config"
 	"github.com/HungSloth/sloth-incubator/internal/template"
 	tea "github.com/charmbracelet/bubbletea"
@@ -39,6 +41,8 @@ type App struct {
 	projectDir       string
 	repoURL          string
 	quitting         bool
+	initMode         bool
+	initDir          string
 }
 
 // NewApp creates a new App model
@@ -50,6 +54,20 @@ func NewApp(manifests []*template.TemplateManifest, cfg *config.Config) App {
 		templateCreator: NewTemplateCreatorModel(cfg),
 		cfg:             cfg,
 		answers:         make(map[string]interface{}),
+	}
+}
+
+// NewInitApp creates an app configured for in-place initialization.
+func NewInitApp(manifests []*template.TemplateManifest, cfg *config.Config, initDir string) App {
+	return App{
+		screen:          ScreenPicker,
+		menu:            NewMenuModel(),
+		picker:          NewPickerModel(manifests),
+		templateCreator: NewTemplateCreatorModel(cfg),
+		cfg:             cfg,
+		answers:         make(map[string]interface{}),
+		initMode:        true,
+		initDir:         initDir,
 	}
 }
 
@@ -91,13 +109,17 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case templateSelectedMsg:
 		a.selectedTemplate = msg.manifest
-		a.form = NewFormModel(msg.manifest)
+		formDefaults := map[string]interface{}{}
+		if a.initMode && a.initDir != "" {
+			formDefaults["project_name"] = filepath.Base(a.initDir)
+		}
+		a.form = NewFormModel(msg.manifest, formDefaults)
 		a.screen = ScreenForm
 		return a, a.form.Init()
 
 	case formCompletedMsg:
 		a.answers = msg.answers
-		a.confirm = NewConfirmModel(a.selectedTemplate, a.answers, a.cfg)
+		a.confirm = NewConfirmModel(a.selectedTemplate, a.answers, a.cfg, a.initMode, a.initDir)
 		a.screen = ScreenConfirm
 		return a, nil
 
@@ -106,7 +128,7 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a, nil
 
 	case confirmProceedMsg:
-		a.progress = NewProgressModel(a.selectedTemplate, a.answers, a.cfg)
+		a.progress = NewProgressModel(a.selectedTemplate, a.answers, a.cfg, a.initMode, a.initDir)
 		a.screen = ScreenProgress
 		return a, a.progress.Init()
 
@@ -117,7 +139,7 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case progressDoneMsg:
 		a.projectDir = msg.projectDir
 		a.repoURL = msg.repoURL
-		a.done = NewDoneModel(a.projectDir, a.repoURL)
+		a.done = NewDoneModel(a.projectDir, a.repoURL, a.initMode)
 		a.screen = ScreenDone
 		return a, nil
 
