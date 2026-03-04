@@ -72,6 +72,7 @@ func NewTemplateCreatorModel(cfg *config.Config) TemplateCreatorModel {
 			{label: "Go", value: "go", desc: "Go-first defaults"},
 			{label: "Node", value: "node", desc: "Node.js-friendly defaults"},
 			{label: "Python", value: "python", desc: "Python-friendly defaults"},
+			{label: "Rust", value: "rust", desc: "Rust-friendly defaults"},
 		},
 		toolOptions: []optionItem{
 			{label: "Git", value: "git", desc: "Include .gitignore starter"},

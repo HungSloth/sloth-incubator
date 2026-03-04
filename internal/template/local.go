@@ -367,6 +367,8 @@ func devcontainerFeaturesForSoftware(software string) []string {
 		return append(base, "node")
 	case "python":
 		return append(base, "python")
+	case "rust":
+		return append(base, "rust")
 	default:
 		return append(base, "go")
 	}
@@ -382,6 +384,8 @@ func featureToDevcontainerRef(feature string) string {
 		return "ghcr.io/devcontainers/features/python:1"
 	case "go":
 		return "ghcr.io/devcontainers/features/go:1"
+	case "rust":
+		return "ghcr.io/devcontainers/features/rust:1"
 	default:
 		return feature
 	}
